@@ -1,7 +1,14 @@
 package com.yanwang.test;
 
+import org.elasticsearch.action.admin.indices.create.CreateIndexRequest;
 import org.elasticsearch.action.admin.indices.create.CreateIndexRequestBuilder;
 import org.elasticsearch.action.admin.indices.create.CreateIndexResponse;
+import org.elasticsearch.action.admin.indices.delete.DeleteIndexResponse;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRequest;
+import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsResponse;
+import org.elasticsearch.action.admin.indices.get.GetIndexRequest;
+import org.elasticsearch.action.admin.indices.get.GetIndexResponse;
+import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.index.IndexRequest;
@@ -20,6 +27,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -89,8 +97,8 @@ public class TestCase {
         XContentBuilder mapping = XContentFactory.jsonBuilder()
                 .startObject()
                 .startObject("settings")
-                .field("number_of_shards", 1) // 设置分片数量
-                .field("number_of_replicas", 0) // 设置副本数量
+                .field("number_of_shards", 3) // 设置分片数量
+                .field("number_of_replicas", 2) // 设置副本数量
                 .endObject()
                 .endObject()
                 .startObject()
@@ -228,5 +236,130 @@ public class TestCase {
         deleteResponse = client.prepareDelete(indexName, typeName, id).get();
         System.out.println(deleteResponse);
     }
+
+
+    @Test
+    public void testMapping() throws IOException {
+        TransportClient client = prepareClient();
+
+        CreateIndexRequest createIndexRequest = new CreateIndexRequest();
+        createIndexRequest.index("secisland");
+
+        Map<String, Object> settings = new HashMap<String, Object>();
+        settings.put("number_of_shards", 3);
+        settings.put("number_of_replicas", 2);
+        createIndexRequest.settings(settings);
+
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+                .startObject()
+                .startObject("properties")
+                .startObject("logType")
+                .field("type", "string")
+                .field("index", "not_analyzed")
+                .endObject()
+                .endObject()
+                .endObject();
+        createIndexRequest.mapping("secilog", xContentBuilder);
+
+        CreateIndexResponse createIndexResponse = client.admin().indices().create(createIndexRequest).actionGet();
+        if (createIndexResponse.isAcknowledged()) {
+            System.out.println("Index created.");
+        } else {
+            System.err.println("Index creation failed.");
+        }
+    }
+
+
+    @Test
+    public void testDeleteIndex() throws IOException {
+        TransportClient client = prepareClient();
+
+        String indexName = "secisland";
+
+        IndicesExistsRequest indicesExistsRequest = new IndicesExistsRequest(indexName);
+        IndicesExistsResponse indicesExistsResponse = client.admin().indices().exists(indicesExistsRequest).actionGet();
+        if (indicesExistsResponse.isExists()) {
+            DeleteIndexResponse deleteIndexResponse = client.admin().indices().prepareDelete(indexName).execute().actionGet();
+            System.out.println(deleteIndexResponse.isAcknowledged());
+        }
+    }
+
+
+    @Test
+    public void testGetIndex() throws IOException {
+        TransportClient client = prepareClient();
+
+        String indexName = "secisland";
+
+        GetIndexRequest getIndexRequest = new GetIndexRequest();
+        getIndexRequest.indices(indexName);
+
+        GetIndexResponse getIndexResponse = client.admin().indices().getIndex(getIndexRequest).actionGet();
+        getIndexResponse.indices();
+        getIndexResponse.settings();
+        getIndexResponse.mappings();
+    }
+
+
+    @Test
+    public void testUpdateMapping() throws IOException {
+        TransportClient client = prepareClient();
+
+        XContentBuilder xContentBuilder = XContentFactory.jsonBuilder()
+                .startObject()
+                .startObject("user")
+                .startObject("properties")
+                .startObject("name")
+                .startObject("properties")
+                .startObject("first")
+                .field("type", "string")
+                .endObject()
+                .endObject()
+                .endObject()
+                .startObject("user_id")
+                .field("type", "string")
+                .field("index", "not_analyzed")
+                .endObject()
+                .endObject()
+                .endObject()
+                .endObject();
+
+        System.out.println(xContentBuilder.string());
+
+        PutMappingResponse putMappingResponse = client.admin().indices().preparePutMapping("secisland").setType("user").setSource(xContentBuilder).execute().actionGet();
+
+        System.out.println(putMappingResponse.isAcknowledged());
+
+        // =================================================
+
+        xContentBuilder = XContentFactory.jsonBuilder()
+                .startObject()
+                .startObject("user")
+                .startObject("properties")
+                .startObject("name")
+                .startObject("properties")
+                .startObject("last")
+                .field("type", "string")
+                .endObject()
+                .endObject()
+                .endObject()
+                .startObject("user_id")
+                .field("type", "string")
+                .field("index", "not_analyzed")
+                .field("ignore_above", 100)
+                .endObject()
+                .endObject()
+                .endObject()
+                .endObject();
+
+        System.out.println(xContentBuilder.string());
+
+        putMappingResponse = client.admin().indices().preparePutMapping("secisland").setType("user").setSource(xContentBuilder).execute().actionGet();
+
+        System.out.println(putMappingResponse.isAcknowledged());
+    }
+
+
+
 
 }
