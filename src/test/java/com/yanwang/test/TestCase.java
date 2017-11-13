@@ -20,6 +20,9 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.index.reindex.BulkByScrollResponse;
+import org.elasticsearch.index.reindex.ReindexAction;
+import org.elasticsearch.index.reindex.ReindexRequestBuilder;
 import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import org.junit.Test;
 
@@ -360,6 +363,15 @@ public class TestCase {
     }
 
 
+    @Test
+    public void testReindex() throws IOException {
+        TransportClient client = prepareClient();
 
+        ReindexRequestBuilder reindexRequestBuilder = ReindexAction.INSTANCE.newRequestBuilder(client).source("secisland").destination("new_secisland");
+        BulkByScrollResponse bulkByScrollResponse = reindexRequestBuilder.execute().actionGet();
+
+        System.out.println(bulkByScrollResponse);
+
+    }
 
 }
