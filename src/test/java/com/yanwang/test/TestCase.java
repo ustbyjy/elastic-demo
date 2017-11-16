@@ -13,6 +13,9 @@ import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
+import org.elasticsearch.action.search.SearchRequestBuilder;
+import org.elasticsearch.action.search.SearchResponse;
+import org.elasticsearch.action.support.IndicesOptions;
 import org.elasticsearch.action.update.UpdateRequest;
 import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.transport.TransportClient;
@@ -20,9 +23,16 @@ import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
+import org.elasticsearch.index.query.BoolQueryBuilder;
+import org.elasticsearch.index.query.QueryBuilders;
+import org.elasticsearch.index.query.RangeQueryBuilder;
+import org.elasticsearch.index.query.WildcardQueryBuilder;
 import org.elasticsearch.index.reindex.BulkByScrollResponse;
 import org.elasticsearch.index.reindex.ReindexAction;
 import org.elasticsearch.index.reindex.ReindexRequestBuilder;
+import org.elasticsearch.search.sort.FieldSortBuilder;
+import org.elasticsearch.search.sort.SortBuilders;
+import org.elasticsearch.search.sort.SortOrder;
 import org.elasticsearch.transport.client.PreBuiltTransportClient;
 import org.junit.Test;
 
@@ -371,6 +381,33 @@ public class TestCase {
         BulkByScrollResponse bulkByScrollResponse = reindexRequestBuilder.execute().actionGet();
 
         System.out.println(bulkByScrollResponse);
+
+    }
+
+
+    @Test
+    public void testQuery() {
+        TransportClient client = prepareClient();
+
+        BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+        boolQueryBuilder.must(QueryBuilders.termQuery("eventCount", 1));
+
+        RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery("eventDate");
+        rangeQueryBuilder.to(new Date().getTime());
+
+        boolQueryBuilder.filter(rangeQueryBuilder);
+
+        FieldSortBuilder fieldSortBuilder = SortBuilders.fieldSort("eventDate").order(SortOrder.DESC);
+
+        SearchRequestBuilder searchRequestBuilder = client.prepareSearch("secisland")
+                .setIndicesOptions(IndicesOptions.fromOptions(true, true, false, false))
+                .setTypes("secilog");
+
+        searchRequestBuilder.setQuery(boolQueryBuilder).addSort(fieldSortBuilder);
+        System.out.println(searchRequestBuilder);
+
+        SearchResponse searchResponse = searchRequestBuilder.get();
+        System.out.println(searchResponse.toString());
 
     }
 

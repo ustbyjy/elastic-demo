@@ -32,6 +32,11 @@ public class Application {
         return "index";
     }
 
+    @PostMapping("/test")
+    public String test(@RequestParam Long userId) {
+        return "test";
+    }
+
     @GetMapping("/get/book/novel")
     @ResponseBody
     public ResponseEntity get(

@@ -15,10 +15,10 @@ public class MyConfig {
 
     @Bean
     public TransportClient getClient() throws UnknownHostException {
-        InetSocketTransportAddress node = new InetSocketTransportAddress(InetAddress.getByName("vhost1.com"), 9300);
+        InetSocketTransportAddress node = new InetSocketTransportAddress(InetAddress.getByName("node1"), 9300);
         Settings settings = Settings.builder()
                 .put("cluster.name", "elasticsearch")
-                .put("node.name", "node-1")
+                .put("node.name", "master")
                 .put("client.transport.sniff", true)
                 .build();
         TransportClient client = new PreBuiltTransportClient(settings);
