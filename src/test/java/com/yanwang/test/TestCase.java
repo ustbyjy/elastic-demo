@@ -9,8 +9,12 @@ import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRespon
 import org.elasticsearch.action.admin.indices.get.GetIndexRequest;
 import org.elasticsearch.action.admin.indices.get.GetIndexResponse;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
+import org.elasticsearch.action.bulk.BulkRequestBuilder;
+import org.elasticsearch.action.bulk.BulkResponse;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetResponse;
+import org.elasticsearch.action.get.MultiGetItemResponse;
+import org.elasticsearch.action.get.MultiGetResponse;
 import org.elasticsearch.action.index.IndexRequest;
 import org.elasticsearch.action.index.IndexResponse;
 import org.elasticsearch.action.search.SearchRequestBuilder;
@@ -26,8 +30,8 @@ import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.index.query.BoolQueryBuilder;
 import org.elasticsearch.index.query.QueryBuilders;
 import org.elasticsearch.index.query.RangeQueryBuilder;
-import org.elasticsearch.index.query.WildcardQueryBuilder;
 import org.elasticsearch.index.reindex.BulkByScrollResponse;
+import org.elasticsearch.index.reindex.DeleteByQueryAction;
 import org.elasticsearch.index.reindex.ReindexAction;
 import org.elasticsearch.index.reindex.ReindexRequestBuilder;
 import org.elasticsearch.search.sort.FieldSortBuilder;
@@ -70,13 +74,21 @@ public class TestCase {
         client.close();
     }
 
+    /**
+     * client.transport.sniff ：设为true时，使客户端去嗅探整个集群的状态，把集群中其他机器的IP地址加到客户端中
+     * client.transport.ignore_cluster_name：设为true时，忽略连接节点集群验证
+     * client.transport.ping_timeout：ping一个节点的响应时间，默认5秒
+     * client.transport.nodes_sampler_interval：sample/ping节点的时间间隔，默认5秒
+     *
+     * @throws UnknownHostException
+     */
     @Test
     public void testClient2() throws UnknownHostException {
         InetSocketTransportAddress node = new InetSocketTransportAddress(InetAddress.getByName("node1"), 9300);
 
         Settings settings = Settings.builder()
                 .put("cluster.name", "elasticsearch")
-                .put("client.transport.sniff", true) // 设为true时，使客户端去嗅探整个集群的状态，把集群中其他机器的IP地址加到客户端种
+                .put("client.transport.sniff", true)
                 .build();
 
         TransportClient client = new PreBuiltTransportClient(settings);
@@ -153,6 +165,22 @@ public class TestCase {
         }
     }
 
+    @Test
+    public void testCreateIndex2() throws IOException {
+        TransportClient client = prepareClient();
+
+        Map<String, Object> json = new HashMap<String, Object>();
+        json.put("user", "kimchy");
+        json.put("postDate", "2013-01-30");
+        json.put("message", "trying out Elasticsearch");
+
+        IndexResponse indexResponse = client.prepareIndex("fendo", "fendodate")
+                .setSource(json)
+                .get();
+
+        System.out.println(indexResponse.getResult());
+    }
+
 
     @Test
     public void testCreateDocument() throws IOException {
@@ -179,6 +207,41 @@ public class TestCase {
 
 
     @Test
+    public void testBatchCreateDocument() throws IOException {
+        TransportClient client = prepareClient();
+
+        BulkRequestBuilder bulkRequest = client.prepareBulk();
+        bulkRequest.add(client.prepareIndex("twitter", "tweet", "1")
+                .setSource(XContentFactory.jsonBuilder()
+                        .startObject()
+                        .field("user", "kimchy")
+                        .field("postDate", new Date())
+                        .field("message", "trying out Elasticsearch")
+                        .endObject()
+                )
+        );
+        bulkRequest.add(client.prepareIndex("twitter", "tweet", "2")
+                .setSource(XContentFactory.jsonBuilder()
+                        .startObject()
+                        .field("user", "james")
+                        .field("postDate", new Date())
+                        .field("message", "another post")
+                        .endObject()
+                )
+        );
+        BulkResponse bulkResponse = bulkRequest.get();
+        System.out.println(bulkResponse.hasFailures());
+        if (bulkResponse.hasFailures()) {
+            System.out.println("处理失败");
+        }
+    }
+
+    /**
+     * UpdateRequest方式
+     *
+     * @throws IOException
+     */
+    @Test
     public void testUpdateDocument1() throws IOException {
         TransportClient client = prepareClient();
 
@@ -189,13 +252,20 @@ public class TestCase {
         updateRequest.index(indexName);
         updateRequest.type(typeName);
         updateRequest.id("1");
-        updateRequest.doc(XContentFactory.jsonBuilder().startObject().field("type", "file").endObject());
+        updateRequest.doc(XContentFactory.jsonBuilder()
+                .startObject()
+                .field("type", "file")
+                .endObject());
 
         UpdateResponse updateResponse = client.update(updateRequest).actionGet();
         System.out.println(updateResponse);
     }
 
-
+    /**
+     * 更新插入：如果存在就更新，如果不存在就插入
+     *
+     * @throws IOException
+     */
     @Test
     public void testUpdateDocument2() throws IOException {
         TransportClient client = prepareClient();
@@ -218,14 +288,39 @@ public class TestCase {
         System.out.println(updateResponse);
     }
 
+    /**
+     * prepareUpdate方式
+     *
+     * @throws IOException
+     */
+    @Test
+    public void testUpdateDocument3() throws IOException {
+        TransportClient client = prepareClient();
 
+        String indexName = "secisland";
+        String typeName = "secilog";
+
+        UpdateResponse updateResponse = client.prepareUpdate(indexName, typeName, "1")
+                .setDoc(XContentFactory.jsonBuilder()
+                        .startObject()
+                        .field("type", "file")
+                        .endObject())
+                .get();
+        System.out.println(updateResponse);
+    }
+
+    /**
+     * operationThreaded：设置为true，在不同的线程里执行此次操作
+     */
     @Test
     public void testGetDocument() {
         TransportClient client = prepareClient();
 
         String indexName = "secisland";
         String typeName = "secilog";
-        GetResponse getResponse = client.prepareGet(indexName, typeName, "1").get();
+        GetResponse getResponse = client.prepareGet(indexName, typeName, "1")
+                .setOperationThreaded(false)
+                .get();
         Map<String, Object> source = getResponse.getSource();
 
         long version = getResponse.getVersion();
@@ -234,6 +329,23 @@ public class TestCase {
         System.out.println("id: " + id);
     }
 
+    @Test
+    public void testMultiGetDocument() {
+        TransportClient client = prepareClient();
+
+        MultiGetResponse multiGetItemResponses = client.prepareMultiGet()
+                .add("secisland", "secilog", "1")
+                .add("new_secisland", "secilog", "1")
+                .get();
+
+        for (MultiGetItemResponse itemResponse : multiGetItemResponses) {
+            GetResponse getResponse = itemResponse.getResponse();
+            if (getResponse.isExists()) {
+                String json = getResponse.getSourceAsString();
+                System.out.println(json);
+            }
+        }
+    }
 
     @Test
     public void testDeleteDocument() {
@@ -248,6 +360,19 @@ public class TestCase {
         id = "3";
         deleteResponse = client.prepareDelete(indexName, typeName, id).get();
         System.out.println(deleteResponse);
+    }
+
+    @Test
+    public void testDeleteByQueryDocument() {
+        TransportClient client = prepareClient();
+
+        BulkByScrollResponse response = DeleteByQueryAction.INSTANCE.newRequestBuilder(client)
+                .filter(QueryBuilders.matchQuery("user", "kimchy"))
+                .source("fendo") // 索引名
+                .get(); // 执行
+
+        System.out.println(response);
+        System.out.println(response.getDeleted()); // 删除文档的数量
     }
 
 
