@@ -9,8 +9,8 @@ import org.elasticsearch.action.admin.indices.exists.indices.IndicesExistsRespon
 import org.elasticsearch.action.admin.indices.get.GetIndexRequest;
 import org.elasticsearch.action.admin.indices.get.GetIndexResponse;
 import org.elasticsearch.action.admin.indices.mapping.put.PutMappingResponse;
-import org.elasticsearch.action.bulk.BulkRequestBuilder;
-import org.elasticsearch.action.bulk.BulkResponse;
+import org.elasticsearch.action.bulk.*;
+import org.elasticsearch.action.delete.DeleteRequest;
 import org.elasticsearch.action.delete.DeleteResponse;
 import org.elasticsearch.action.get.GetResponse;
 import org.elasticsearch.action.get.MultiGetItemResponse;
@@ -25,6 +25,9 @@ import org.elasticsearch.action.update.UpdateResponse;
 import org.elasticsearch.client.transport.TransportClient;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.transport.InetSocketTransportAddress;
+import org.elasticsearch.common.unit.ByteSizeUnit;
+import org.elasticsearch.common.unit.ByteSizeValue;
+import org.elasticsearch.common.unit.TimeValue;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.index.query.BoolQueryBuilder;
@@ -536,4 +539,56 @@ public class TestCase {
 
     }
 
+    /**
+     * 在给定的大小数量上定时批量自动请求
+     */
+    @Test
+    public void testBulkProcessor() throws IOException, InterruptedException {
+        TransportClient client = prepareClient();
+
+        BulkProcessor bulkProcessor = BulkProcessor.builder(
+                client,
+                new BulkProcessor.Listener() {
+                    @Override
+                    public void beforeBulk(long executionId, BulkRequest request) {
+                        // 调用bulk之前执行，例如你可以通过request.numberOfActions()方法知道numberOfActions
+                        System.out.println(request.numberOfActions());
+                    }
+
+                    @Override
+                    public void afterBulk(long executionId, BulkRequest request, BulkResponse response) {
+                        // 调用bulk之后执行，例如你可以通过request.hasFailures()方法知道是否执行失败
+                        System.out.println(response.hasFailures());
+                    }
+
+                    @Override
+                    public void afterBulk(long executionId, BulkRequest request, Throwable failure) {
+                        // 调用失败抛Throwable
+                        System.out.println(failure);
+                    }
+                })
+                // 每次10000请求
+                .setBulkActions(10000)
+                // 拆成5mb一块
+                .setBulkSize(new ByteSizeValue(5, ByteSizeUnit.MB))
+                // 无论请求数量多少，每5秒钟请求一次
+                .setFlushInterval(TimeValue.timeValueSeconds(5))
+                // 设置并发请求的数量，值为0意味着只允许执行一个请求，值为1意味着允许1并发请求
+                .setConcurrentRequests(1)
+                // 设置自定义重复请求机制，最开始等待100毫秒，之后成倍增加，重试3次，当一次或多次重复请求失败后因为计算资源不够抛出EsRejectedExecutionException 异常，可以通过BackoffPolicy.noBackoff()方法关闭重试机制
+                .setBackoffPolicy(BackoffPolicy.exponentialBackoff(TimeValue.timeValueMillis(100), 3))
+                .build();
+
+        bulkProcessor.add(new IndexRequest("twitter", "tweet", "10").source(XContentFactory.jsonBuilder()
+                .startObject()
+                .field("user", "luck")
+                .field("postDate", new Date())
+                .field("message", "trying out Elasticsearch ...")
+                .endObject()));
+        bulkProcessor.add(new DeleteRequest("twitter", "tweet", "2"));
+
+        bulkProcessor.flush();
+
+        bulkProcessor.close();
+    }
 }
