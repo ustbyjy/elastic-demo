@@ -591,4 +591,14 @@ public class TestCase {
 
         bulkProcessor.close();
     }
+
+
+    @Test
+    public void testStringHash() {
+        String s1 = "9f74e74a2a31f71fe52525509ee8a86b$ysuc";
+
+        String s2 = "15242b1ee32730dc7d080bc4831dcd4a$ysuc";
+        System.out.println(s1.hashCode() % 2);
+        System.out.println(s2.hashCode() % 2);
+    }
 }
