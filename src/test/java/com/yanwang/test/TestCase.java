@@ -48,6 +48,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -336,13 +337,29 @@ public class TestCase {
     public void testMultiGetDocument() {
         TransportClient client = prepareClient();
 
-        MultiGetResponse multiGetItemResponses = client.prepareMultiGet()
+        // 同时指定index、type和id
+        MultiGetResponse multiGetItemResponses1 = client.prepareMultiGet()
                 .add("secisland", "secilog", "1")
                 .add("new_secisland", "secilog", "1")
                 .get();
 
-        for (MultiGetItemResponse itemResponse : multiGetItemResponses) {
-            GetResponse getResponse = itemResponse.getResponse();
+        // index相同，type不同
+        MultiGetResponse multiGetItemResponses2 = client.prepareMultiGet()
+                .add("secisland", "secilog", "1")
+                .add("secisland", "_secilog", "1")
+                .get();
+
+        // index相同，type相同，id不同
+        MultiGetResponse multiGetItemResponses3 = client.prepareMultiGet()
+                .add("secisland", "secilog", "1", "2")
+                .get();
+
+        Iterator<MultiGetItemResponse> iterator = multiGetItemResponses1.iterator();
+//        Iterator<MultiGetItemResponse> iterator = multiGetItemResponses2.iterator();
+//        Iterator<MultiGetItemResponse> iterator = multiGetItemResponses3.iterator();
+        GetResponse getResponse;
+        while (iterator.hasNext()) {
+            getResponse = iterator.next().getResponse();
             if (getResponse.isExists()) {
                 String json = getResponse.getSourceAsString();
                 System.out.println(json);
@@ -567,8 +584,8 @@ public class TestCase {
                         System.out.println(failure);
                     }
                 })
-                // 每次10000请求
-                .setBulkActions(10000)
+                // 每次1000请求
+                .setBulkActions(1000)
                 // 拆成5mb一块
                 .setBulkSize(new ByteSizeValue(5, ByteSizeUnit.MB))
                 // 无论请求数量多少，每5秒钟请求一次
