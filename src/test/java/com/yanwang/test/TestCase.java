@@ -371,23 +371,27 @@ public class TestCase {
         boolQueryBuilder.filter(rangeQueryBuilder);
 
         List<SearchHit> hits = new ArrayList<SearchHit>();
+        int queryCount = 0;
+        int size = 1000;
         SearchResponse scrollResp = client.prepareSearch(indexName)
                 .addSort(FieldSortBuilder.DOC_FIELD_NAME, SortOrder.ASC)
                 .setScroll(new TimeValue(60000))
                 .setQuery(boolQueryBuilder)
-                .setSize(1000)
+                .setSize(size)
                 .get();
 
-        System.out.println(scrollResp.getHits().getTotalHits());
+        int page = (int) (scrollResp.getHits().getTotalHits() / (size));
 
-        do {
+        for (int i = 0; i < page; i++) {
             for (SearchHit hit : scrollResp.getHits().getHits()) {
                 hits.add(hit);
             }
+            queryCount++;
             scrollResp = client.prepareSearchScroll(scrollResp.getScrollId()).setScroll(new TimeValue(60000)).execute().actionGet();
-        } while (scrollResp.getHits().getHits().length != 0);
+        }
 
         System.out.println(hits.size());
+        System.out.println(queryCount);
     }
 
     @Test
