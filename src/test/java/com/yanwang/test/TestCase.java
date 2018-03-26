@@ -37,6 +37,7 @@ import org.elasticsearch.index.reindex.BulkByScrollResponse;
 import org.elasticsearch.index.reindex.DeleteByQueryAction;
 import org.elasticsearch.index.reindex.ReindexAction;
 import org.elasticsearch.index.reindex.ReindexRequestBuilder;
+import org.elasticsearch.search.SearchHit;
 import org.elasticsearch.search.sort.FieldSortBuilder;
 import org.elasticsearch.search.sort.SortBuilders;
 import org.elasticsearch.search.sort.SortOrder;
@@ -46,10 +47,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Created with IntelliJ IDEA.
@@ -209,6 +207,32 @@ public class TestCase {
 
     }
 
+    @Test
+    public void testCreateDocument2() throws IOException {
+        TransportClient client = prepareClient();
+
+        String indexName = "secisland";
+        String typeName = "secilog";
+
+        int count = 50000;
+        for (int i = 1; i <= count; i++) {
+            XContentBuilder source = XContentFactory.jsonBuilder();
+            source.startObject()
+                    .field("type", "syslog")
+                    .field("eventCount", i)
+                    .field("eventDate", new Date())
+                    .field("message", "message" + i)
+                    .endObject();
+
+            IndexResponse indexResponse = client.prepareIndex(indexName, typeName, "" + i)
+                    .setSource(source)
+                    .get();
+
+            System.out.println("index:" + indexResponse.getIndex() + " insert doc id: " + indexResponse.getId());
+        }
+
+    }
+
 
     @Test
     public void testBatchCreateDocument() throws IOException {
@@ -331,6 +355,39 @@ public class TestCase {
         String id = getResponse.getId();
         System.out.println("version: " + version);
         System.out.println("id: " + id);
+    }
+
+    @Test
+    public void testScrollDocument() {
+        TransportClient client = prepareClient();
+
+        String indexName = "secisland";
+
+        BoolQueryBuilder boolQueryBuilder = QueryBuilders.boolQuery();
+
+        RangeQueryBuilder rangeQueryBuilder = QueryBuilders.rangeQuery("eventCount");
+        rangeQueryBuilder.gt(10000);
+
+        boolQueryBuilder.filter(rangeQueryBuilder);
+
+        List<SearchHit> hits = new ArrayList<SearchHit>();
+        SearchResponse scrollResp = client.prepareSearch(indexName)
+                .addSort(FieldSortBuilder.DOC_FIELD_NAME, SortOrder.ASC)
+                .setScroll(new TimeValue(60000))
+                .setQuery(boolQueryBuilder)
+                .setSize(1000)
+                .get();
+
+        System.out.println(scrollResp.getHits().getTotalHits());
+
+        do {
+            for (SearchHit hit : scrollResp.getHits().getHits()) {
+                hits.add(hit);
+            }
+            scrollResp = client.prepareSearchScroll(scrollResp.getScrollId()).setScroll(new TimeValue(60000)).execute().actionGet();
+        } while (scrollResp.getHits().getHits().length != 0);
+
+        System.out.println(hits.size());
     }
 
     @Test
