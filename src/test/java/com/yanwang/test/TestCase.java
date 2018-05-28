@@ -115,6 +115,25 @@ public class TestCase {
         return client;
     }
 
+    public TransportClient prepareNoSniffClient() {
+        TransportClient client = null;
+        try {
+            InetSocketTransportAddress node1 = new InetSocketTransportAddress(InetAddress.getByName("node1"), 9300);
+            InetSocketTransportAddress node2 = new InetSocketTransportAddress(InetAddress.getByName("node1"), 9301);
+            InetSocketTransportAddress node3 = new InetSocketTransportAddress(InetAddress.getByName("node1"), 9302);
+            Settings settings = Settings.builder()
+                    .put("cluster.name", "elasticsearch")
+                    .build();
+            client = new PreBuiltTransportClient(settings);
+            client.addTransportAddress(node1);
+            client.addTransportAddress(node2);
+            client.addTransportAddress(node3);
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+        }
+        return client;
+    }
+
     @Test
     public void testCreateIndex() throws IOException {
         TransportClient client = prepareClient();
@@ -491,7 +510,7 @@ public class TestCase {
 
     @Test
     public void testDeleteIndex() throws IOException {
-        TransportClient client = prepareClient();
+        TransportClient client = prepareNoSniffClient();
 
         String indexName = "secisland";
 
